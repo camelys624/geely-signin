@@ -1,0 +1,22 @@
+{
+  "name": "jlqc",
+  "version": "1.0.0",
+  "main": "geely-node.js",
+  "scripts": {
+    "start": "node geely-node.js",
+    "geely": "node geely-node.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "geely",
+    "signin",
+    "automation"
+  ],
+  "author": "",
+  "license": "ISC",
+  "description": "吉利汽车自动签到脚本 - Node.js版本",
+  "dependencies": {
+    "crypto-js": "^4.2.0",
+    "dotenv": "^17.2.1"
+  }
+}
