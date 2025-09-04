@@ -4,7 +4,11 @@
 适配Node.js环境，移除Quantumult-X依赖
 
 环境变量配置:
+单个账户:
 geely_val={"token":"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx","devicesn":"XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"}
+
+多个账户:
+geely_val=[{"token":"token1","devicesn":"device1","name":"账户1"},{"token":"token2","devicesn":"device2","name":"账户2"}]
 
 使用方法:
 1. 设置环境变量 geely_val 或创建 .env 文件
@@ -18,38 +22,22 @@ const crypto = require('crypto-js');
 const path = require('path');
 
 class GeelyApp {
-    constructor() {
+    constructor(config) {
         this.name = "吉利汽车签到";
         this.messages = [];
         this.dataFile = path.join(__dirname, 'geely_data.json');
-        this.loadConfig();
-    }
-
-    loadConfig() {
-        // 从环境变量获取配置
-        const geelyVal = process.env.geely_val;
-        if (geelyVal) {
-            try {
-                this.config = JSON.parse(geelyVal);
-                const {token, devicesn} = this.config;
-                
-                if (!token || !devicesn) {
-                    throw new Error('配置格式错误：缺少token或devicesn');
-                }
-                
-                this.token = token;
-                this.devicesn = devicesn;
-                this.log(`✅ 配置加载成功`);
-            } catch (e) {
-                throw new Error(`配置解析失败: ${e.message}`);
-            }
-        } else {
-            throw new Error('❌ 请设置环境变量 geely_val');
+        if (config) {
+            this.config = config;
+            this.token = config.token;
+            this.devicesn = config.devicesn;
+            this.accountName = config.name || config.token.slice(-6);
         }
     }
 
+
     log(message) {
-        console.log(`[${new Date().toLocaleString()}] ${message}`);
+        const prefix = this.accountName ? `[${this.accountName}]` : '';
+        console.log(`[${new Date().toLocaleString()}] ${prefix} ${message}`);
     }
 
     pushMsg(message) {
@@ -245,34 +233,94 @@ class GeelyApp {
 
     async run() {
         try {
-            this.log(`🚀 开始执行 ${this.name}`);
+            this.log(`🚀 开始执行签到`);
             
-            // 获取最新版本
             this.appVersion = await this.getAppVersion();
             
-            // 执行签到
             await this.signIn();
             
-            // 获取签到统计
             await this.getSignMsg();
             
-            // 获取能量体信息
             await this.summary();
             
-            this.log(`✅ ${this.name} 执行完成`);
-            this.log(`📋 执行结果:\n${this.messages.join('\n')}`);
+            this.log(`✅ 签到执行完成`);
+            return this.messages;
             
         } catch (error) {
             this.log(`❌ 执行失败: ${error.message}`);
-            process.exit(1);
+            throw error;
         }
+    }
+}
+
+// 多账户运行函数
+async function runMultipleAccounts() {
+    const geelyVal = process.env.geely_val;
+    if (!geelyVal) {
+        console.error('❌ 请设置环境变量 geely_val');
+        process.exit(1);
+    }
+
+    let configs;
+    try {
+        const parsed = JSON.parse(geelyVal);
+        
+        if (Array.isArray(parsed)) {
+            configs = parsed;
+        } else {
+            configs = [parsed];
+        }
+    } catch (e) {
+        console.error(`❌ 配置解析失败: ${e.message}`);
+        process.exit(1);
+    }
+
+    console.log(`🚀 开始执行吉利汽车签到，共 ${configs.length} 个账户`);
+    
+    const allResults = [];
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < configs.length; i++) {
+        const config = configs[i];
+        
+        if (!config.token || !config.devicesn) {
+            console.error(`❌ 账户 ${i + 1} 配置格式错误：缺少token或devicesn`);
+            failCount++;
+            continue;
+        }
+
+        console.log(`\n📱 开始处理账户 ${config.name || `账户${i + 1}`}`);
+        
+        try {
+            const app = new GeelyApp(config);
+            const messages = await app.run();
+            allResults.push(...messages);
+            successCount++;
+            
+            if (i < configs.length - 1) {
+                console.log('⏰ 等待 3 秒后处理下一个账户...');
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+        } catch (error) {
+            console.error(`❌ 账户 ${config.name || `账户${i + 1}`} 签到失败: ${error.message}`);
+            failCount++;
+        }
+    }
+
+    console.log(`\n📋 签到总结:`);
+    console.log(`✅ 成功: ${successCount} 个账户`);
+    console.log(`❌ 失败: ${failCount} 个账户`);
+    console.log(`📝 详细结果:\n${allResults.join('\n')}`);
+    
+    if (failCount > 0) {
+        process.exit(1);
     }
 }
 
 // 主程序入口
 if (require.main === module) {
-    const app = new GeelyApp();
-    app.run().catch(error => {
+    runMultipleAccounts().catch(error => {
         console.error(`程序异常退出: ${error.message}`);
         process.exit(1);
     });
